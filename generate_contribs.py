@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -43,7 +43,7 @@ ANGLE_DEG = 22
 GAP = 2
 SHADE_LEFT = 0.88
 SHADE_RIGHT = 0.74
-HEIGHT_SCHEME = [2, 5, 9, 13, 17]
+HEIGHT_SCHEME = [1, 4, 7, 10, 13]
 
 LEVEL_MAP = {
     "NONE": 0,
@@ -224,10 +224,10 @@ def render_top_right_stats(x: float, y: float, palette_name: str, stats: Stats) 
     return "\n".join(
         [
             f'<text x="{x:.2f}" y="{y:.2f}" text-anchor="end" '
-            f'font-family=\'{FONT_STACK}\' font-size="38" font-weight="700" fill="{text["accent"]}">'
+            f'font-family=\'{FONT_STACK}\' font-size="30" font-weight="700" fill="{text["accent"]}">'
             f"{stats.total_commits:,}</text>",
-            f'<text x="{x:.2f}" y="{y + 14:.2f}" text-anchor="end" '
-            f'font-family=\'{FONT_STACK}\' font-size="10" fill="{text["secondary"]}" letter-spacing="0.8">'
+            f'<text x="{x:.2f}" y="{y + 12:.2f}" text-anchor="end" '
+            f'font-family=\'{FONT_STACK}\' font-size="9" fill="{text["secondary"]}" letter-spacing="0.8">'
             f"TOTAL COMMITS</text>",
         ]
     )
@@ -240,15 +240,15 @@ def render_bottom_left_stats(x: float, y: float, palette_name: str, stats: Stats
 
     chart_x = x
     chart_y = y
-    chart_height = 50
-    bar_width = 10
+    chart_height = 34
+    bar_width = 8
     bar_gap = 4
     max_value = max(stats.day_of_week_totals) or 1
     day_labels = ["S", "M", "T", "W", "T", "F", "S"]
 
     parts.append(
         f'<text x="{chart_x:.2f}" y="{chart_y - chart_height - 8:.2f}" '
-        f'font-family=\'{FONT_STACK}\' font-size="10" fill="{text["secondary"]}" letter-spacing="0.8">'
+        f'font-family=\'{FONT_STACK}\' font-size="9" fill="{text["secondary"]}" letter-spacing="0.8">'
         f"MOST ACTIVE DAYS</text>"
     )
 
@@ -264,7 +264,7 @@ def render_bottom_left_stats(x: float, y: float, palette_name: str, stats: Stats
         )
         parts.append(
             f'<text x="{bar_x + bar_width / 2:.2f}" y="{chart_y + 14:.2f}" text-anchor="middle" '
-            f'font-family=\'{FONT_STACK}\' font-size="10" fill="{text["secondary"]}">{day_labels[idx]}</text>'
+            f'font-family=\'{FONT_STACK}\' font-size="9" fill="{text["secondary"]}">{day_labels[idx]}</text>'
         )
 
     return "\n".join(parts)
@@ -293,13 +293,13 @@ def render_svg(cells: list[Cell], palette_name: str, stats: Stats, weeks: int) -
     graph_max_y = max(ys)
 
     pad = 8
-    extra_top = 24
+    extra_top = 18
     extra_left = 20
 
     # Reserve dedicated layout space so the two stat blocks never sit on top
     # of the isometric graph when the SVG is shown at larger sizes.
-    stat_right_gutter = 220
-    stat_bottom_gutter = 108
+    stat_right_gutter = 168
+    stat_bottom_gutter = 64
 
     extra_right = stat_right_gutter
     extra_bottom = stat_bottom_gutter
@@ -311,10 +311,10 @@ def render_svg(cells: list[Cell], palette_name: str, stats: Stats, weeks: int) -
 
     right_edge = graph_max_x + pad + extra_right
     tr_anchor_x = right_edge - 18
-    tr_anchor_y = graph_min_y + 36
+    tr_anchor_y = graph_min_y + 28
 
     bl_left = graph_min_x + 8
-    bl_bottom = graph_max_y + 84
+    bl_bottom = graph_max_y + 54
 
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{min_x:.2f} {min_y:.2f} {width:.2f} {height:.2f}" '
@@ -365,9 +365,7 @@ def github_graphql(token: str, query: str, variables: dict[str, object]) -> dict
     return data["data"]
 
 
-def fetch_year_payload(token: str, login: str, year: int) -> dict[str, object]:
-    start = date(year, 1, 1)
-    end = date.today() if year == date.today().year else date(year, 12, 31)
+def fetch_range_payload(token: str, login: str, start: date, end: date) -> dict[str, object]:
     data = github_graphql(
         token,
         YEAR_QUERY,
@@ -435,13 +433,17 @@ def normalize_languages(totals: Counter[str], top_n: int = 4) -> list[tuple[str,
 
 
 def fetch_live_data(token: str, login: str) -> tuple[list[Cell], Stats, int]:
-    current_year = date.today().year
-    current_payload = fetch_year_payload(token, login, current_year)
+    today = date.today()
+    rolling_start = today - timedelta(days=364)
+
+    current_payload = fetch_range_payload(token, login, rolling_start, today)
     contribution_years = current_payload["contributionYears"]
     total_commits = 0
 
     for year in contribution_years:
-        year_payload = current_payload if year == current_year else fetch_year_payload(token, login, year)
+        year_start = max(date(year, 1, 1), rolling_start)
+        year_end = min(date(year, 12, 31), today)
+        year_payload = fetch_range_payload(token, login, year_start, year_end)
         total_commits += year_payload["totalCommitContributions"]
 
     weeks = current_payload["contributionCalendar"]["weeks"]
