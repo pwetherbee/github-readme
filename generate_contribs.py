@@ -43,7 +43,7 @@ ANGLE_DEG = 20
 GAP = 2
 SHADE_LEFT = 0.88
 SHADE_RIGHT = 0.74
-HEIGHT_SCHEME = [1, 4, 7, 10, 13]
+MAX_COLUMN_HEIGHT = 16
 
 LEVEL_MAP = {
     "NONE": 0,
@@ -125,6 +125,7 @@ class Cell:
     week: int
     day: int
     level: int
+    count: int
 
 
 @dataclass
@@ -164,7 +165,17 @@ def generate_mock_data(weeks: int = 53) -> list[Cell]:
                 if r <= acc:
                     level = idx
                     break
-            cells.append(Cell(w, d, level))
+            if level == 0:
+                count = 0
+            elif level == 1:
+                count = random.randint(1, 3)
+            elif level == 2:
+                count = random.randint(4, 8)
+            elif level == 3:
+                count = random.randint(9, 15)
+            else:
+                count = random.randint(16, 28)
+            cells.append(Cell(w, d, level, count))
     return cells
 
 
@@ -186,12 +197,11 @@ def project(x: float, y: float, z: float) -> tuple[float, float]:
     return sx, sy
 
 
-def cube_faces_svg(gx: int, gy: int, level: int, top_color: str) -> str:
+def cube_faces_svg(gx: int, gy: int, height: int, top_color: str) -> str:
     step = CELL + GAP
     x0 = gx * step
     y0 = gy * step
     size = CELL
-    height = HEIGHT_SCHEME[level]
 
     tl = project(x0, y0, height)
     tr = project(x0 + size, y0, height)
@@ -217,6 +227,17 @@ def cube_faces_svg(gx: int, gy: int, level: int, top_color: str) -> str:
         polys.append(f'<polygon points="{right_pts}" fill="{shade(top_color, SHADE_RIGHT)}"/>')
 
     return "\n".join(polys)
+
+
+def height_from_count(count: int, max_count: int) -> int:
+    if count <= 0 or max_count <= 0:
+        return 0
+
+    # Use a softened power scale so high-activity periods feel like a wall
+    # without flattening quieter but non-zero days into the floor.
+    normalized = count / max_count
+    scaled = normalized ** 0.6
+    return max(2, int(round(scaled * MAX_COLUMN_HEIGHT)))
 
 
 def render_top_right_stats(x: float, y: float, palette_name: str, stats: Stats) -> str:
@@ -248,15 +269,10 @@ def render_bottom_left_stats(x: float, y: float, palette_name: str, stats: Stats
     chart_height = 54
     bar_width = 12
     bar_gap = 4
-    tagline_y = label_y + 18
+    title_y = label_y + 20
+    tagline_y = title_y + 16
     max_value = max(stats.day_of_week_totals) or 1
     day_labels = ["S", "M", "T", "W", "T", "F", "S"]
-
-    parts.append(
-        f'<text x="{chart_x:.2f}" y="{chart_y - chart_height - 5:.2f}" '
-        f'font-family=\'{FONT_STACK}\' font-size="12" fill="{text["secondary"]}" letter-spacing="0.3">'
-        f"Most active days</text>"
-    )
 
     for idx, value in enumerate(stats.day_of_week_totals):
         bar_x = chart_x + idx * (bar_width + bar_gap)
@@ -274,6 +290,11 @@ def render_bottom_left_stats(x: float, y: float, palette_name: str, stats: Stats
         )
 
     parts.append(
+        f'<text x="{chart_x:.2f}" y="{title_y:.2f}" '
+        f'font-family=\'{FONT_STACK}\' font-size="12" fill="{text["secondary"]}" letter-spacing="0.3">'
+        f"Most active days</text>"
+    )
+    parts.append(
         f'<text x="{chart_x:.2f}" y="{tagline_y:.2f}" '
         f'font-family=\'{FONT_STACK}\' font-size="9" fill="{text["secondary"]}">'
         f"Data pulled daily from GitHub.</text>"
@@ -290,8 +311,9 @@ def render_bottom_left_stats(x: float, y: float, palette_name: str, stats: Stats
 def render_svg(cells: list[Cell], palette_name: str, stats: Stats, weeks: int) -> str:
     palette = PALETTES[palette_name]
     sorted_cells = sorted(cells, key=lambda cell: (cell.week + cell.day, cell.level))
+    max_count = max((cell.count for cell in cells), default=0)
 
-    max_height = max(HEIGHT_SCHEME)
+    max_height = height_from_count(max_count, max_count)
     step = CELL + GAP
     corners = [
         project(0, 0, 0),
@@ -333,7 +355,7 @@ def render_svg(cells: list[Cell], palette_name: str, stats: Stats, weeks: int) -
 
     for cell in sorted_cells:
         color = palette["empty"] if cell.level == 0 else palette["levels"][cell.level - 1]
-        parts.append(cube_faces_svg(cell.week, cell.day, cell.level, color))
+        parts.append(cube_faces_svg(cell.week, cell.day, height_from_count(cell.count, max_count), color))
 
     parts.append(render_top_right_stats(tr_anchor_x, tr_anchor_y, palette_name, stats))
     parts.append(render_bottom_left_stats(bl_left, bl_bottom, palette_name, stats))
@@ -427,7 +449,7 @@ def build_cells_and_days(weeks: list[dict[str, object]]) -> tuple[list[Cell], li
             contributed_on = date.fromisoformat(day["date"])
             sunday_first_index = 0 if contributed_on.weekday() == 6 else contributed_on.weekday() + 1
 
-            cells.append(Cell(week=week_index, day=sunday_first_index, level=level))
+            cells.append(Cell(week=week_index, day=sunday_first_index, level=level, count=count))
             day_totals[sunday_first_index] += count
 
     return cells, day_totals
