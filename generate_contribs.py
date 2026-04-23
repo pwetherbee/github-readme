@@ -224,10 +224,10 @@ def render_top_right_stats(x: float, y: float, palette_name: str, stats: Stats) 
     return "\n".join(
         [
             f'<text x="{x:.2f}" y="{y:.2f}" text-anchor="end" '
-            f'font-family=\'{FONT_STACK}\' font-size="30" font-weight="700" fill="{text["accent"]}">'
+            f'font-family=\'{FONT_STACK}\' font-size="26" font-weight="700" fill="{text["accent"]}">'
             f"{stats.total_commits:,}</text>",
-            f'<text x="{x:.2f}" y="{y + 12:.2f}" text-anchor="end" '
-            f'font-family=\'{FONT_STACK}\' font-size="9" fill="{text["secondary"]}" letter-spacing="0.8">'
+            f'<text x="{x:.2f}" y="{y + 11:.2f}" text-anchor="end" '
+            f'font-family=\'{FONT_STACK}\' font-size="8" fill="{text["secondary"]}" letter-spacing="0.8">'
             f"TOTAL COMMITS</text>",
         ]
     )
@@ -240,15 +240,15 @@ def render_bottom_left_stats(x: float, y: float, palette_name: str, stats: Stats
 
     chart_x = x
     chart_y = y
-    chart_height = 34
-    bar_width = 8
-    bar_gap = 4
+    chart_height = 26
+    bar_width = 7
+    bar_gap = 3
     max_value = max(stats.day_of_week_totals) or 1
     day_labels = ["S", "M", "T", "W", "T", "F", "S"]
 
     parts.append(
-        f'<text x="{chart_x:.2f}" y="{chart_y - chart_height - 8:.2f}" '
-        f'font-family=\'{FONT_STACK}\' font-size="9" fill="{text["secondary"]}" letter-spacing="0.8">'
+        f'<text x="{chart_x:.2f}" y="{chart_y - chart_height - 6:.2f}" '
+        f'font-family=\'{FONT_STACK}\' font-size="8" fill="{text["secondary"]}" letter-spacing="0.8">'
         f"MOST ACTIVE DAYS</text>"
     )
 
@@ -263,8 +263,8 @@ def render_bottom_left_stats(x: float, y: float, palette_name: str, stats: Stats
             f'rx="1" fill="{color}"/>'
         )
         parts.append(
-            f'<text x="{bar_x + bar_width / 2:.2f}" y="{chart_y + 14:.2f}" text-anchor="middle" '
-            f'font-family=\'{FONT_STACK}\' font-size="9" fill="{text["secondary"]}">{day_labels[idx]}</text>'
+            f'<text x="{bar_x + bar_width / 2:.2f}" y="{chart_y + 11:.2f}" text-anchor="middle" '
+            f'font-family=\'{FONT_STACK}\' font-size="8" fill="{text["secondary"]}">{day_labels[idx]}</text>'
         )
 
     return "\n".join(parts)
@@ -292,29 +292,22 @@ def render_svg(cells: list[Cell], palette_name: str, stats: Stats, weeks: int) -
     graph_min_y = min(ys)
     graph_max_y = max(ys)
 
-    pad = 8
-    extra_top = 18
-    extra_left = 20
-
-    # Reserve dedicated layout space so the two stat blocks never sit on top
-    # of the isometric graph when the SVG is shown at larger sizes.
-    stat_right_gutter = 168
-    stat_bottom_gutter = 64
-
-    extra_right = stat_right_gutter
-    extra_bottom = stat_bottom_gutter
+    pad = 4
+    extra_top = 4
+    extra_left = 8
+    extra_right = 8
+    extra_bottom = 42
 
     min_x = graph_min_x - pad - extra_left
     min_y = graph_min_y - pad - extra_top
     width = (graph_max_x - graph_min_x) + 2 * pad + extra_left + extra_right
     height = (graph_max_y - graph_min_y) + 2 * pad + extra_top + extra_bottom
 
-    right_edge = graph_max_x + pad + extra_right
-    tr_anchor_x = right_edge - 18
-    tr_anchor_y = graph_min_y + 28
+    tr_anchor_x = graph_max_x - 10
+    tr_anchor_y = graph_min_y + 30
 
-    bl_left = graph_min_x + 8
-    bl_bottom = graph_max_y + 54
+    bl_left = graph_min_x + 10
+    bl_bottom = graph_max_y + 34
 
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{min_x:.2f} {min_y:.2f} {width:.2f} {height:.2f}" '
