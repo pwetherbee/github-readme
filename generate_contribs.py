@@ -43,7 +43,7 @@ ANGLE_DEG = 20
 GAP = 2
 SHADE_LEFT = 0.88
 SHADE_RIGHT = 0.74
-MAX_COLUMN_HEIGHT = 16
+HEIGHT_SCHEME = [0, 4, 8, 12, 16]
 
 LEVEL_MAP = {
     "NONE": 0,
@@ -229,15 +229,8 @@ def cube_faces_svg(gx: int, gy: int, height: int, top_color: str) -> str:
     return "\n".join(polys)
 
 
-def height_from_count(count: int, max_count: int) -> int:
-    if count <= 0 or max_count <= 0:
-        return 0
-
-    # Use a softened power scale so high-activity periods feel like a wall
-    # without flattening quieter but non-zero days into the floor.
-    normalized = count / max_count
-    scaled = normalized ** 0.6
-    return max(2, int(round(scaled * MAX_COLUMN_HEIGHT)))
+def height_from_level(level: int) -> int:
+    return HEIGHT_SCHEME[level]
 
 
 def render_top_right_stats(x: float, y: float, palette_name: str, stats: Stats) -> str:
@@ -311,9 +304,8 @@ def render_bottom_left_stats(x: float, y: float, palette_name: str, stats: Stats
 def render_svg(cells: list[Cell], palette_name: str, stats: Stats, weeks: int) -> str:
     palette = PALETTES[palette_name]
     sorted_cells = sorted(cells, key=lambda cell: (cell.week + cell.day, cell.level))
-    max_count = max((cell.count for cell in cells), default=0)
 
-    max_height = height_from_count(max_count, max_count)
+    max_height = max(HEIGHT_SCHEME)
     step = CELL + GAP
     corners = [
         project(0, 0, 0),
@@ -335,7 +327,7 @@ def render_svg(cells: list[Cell], palette_name: str, stats: Stats, weeks: int) -
     extra_top = 3
     extra_left = 3
     extra_right = 3
-    extra_bottom = 24
+    extra_bottom = 32
 
     min_x = graph_min_x - pad - extra_left
     min_y = graph_min_y - pad - extra_top
@@ -346,7 +338,7 @@ def render_svg(cells: list[Cell], palette_name: str, stats: Stats, weeks: int) -
     tr_anchor_y = graph_min_y
 
     bl_left = graph_min_x
-    bl_bottom = graph_max_y - 6
+    bl_bottom = graph_max_y - 18
 
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{min_x:.2f} {min_y:.2f} {width:.2f} {height:.2f}" '
@@ -355,7 +347,7 @@ def render_svg(cells: list[Cell], palette_name: str, stats: Stats, weeks: int) -
 
     for cell in sorted_cells:
         color = palette["empty"] if cell.level == 0 else palette["levels"][cell.level - 1]
-        parts.append(cube_faces_svg(cell.week, cell.day, height_from_count(cell.count, max_count), color))
+        parts.append(cube_faces_svg(cell.week, cell.day, height_from_level(cell.level), color))
 
     parts.append(render_top_right_stats(tr_anchor_x, tr_anchor_y, palette_name, stats))
     parts.append(render_bottom_left_stats(bl_left, bl_bottom, palette_name, stats))
