@@ -266,7 +266,6 @@ def render_top_right_stats(x: float, y: float, palette_name: str, stats: Stats) 
     label_size = 10
     number_y = y + number_size - 2
     label_y = number_y + 12
-    note_y = label_y + 16
     return "\n".join(
         [
             f'<text x="{x:.2f}" y="{number_y:.2f}" text-anchor="end" '
@@ -275,12 +274,6 @@ def render_top_right_stats(x: float, y: float, palette_name: str, stats: Stats) 
             f'<text x="{x:.2f}" y="{label_y:.2f}" text-anchor="end" '
             f'font-family=\'{FONT_STACK}\' font-size="{label_size}" fill="{text["secondary"]}" letter-spacing="0.8">'
             f"TOTAL CONTRIBUTIONS</text>",
-            f'<text x="{x:.2f}" y="{note_y:.2f}" text-anchor="end" '
-            f'font-family=\'{FONT_STACK}\' font-size="9" fill="{text["secondary"]}">'
-            f"Data pulled daily from GitHub.</text>",
-            f'<text x="{x:.2f}" y="{note_y + 10:.2f}" text-anchor="end" '
-            f'font-family=\'{FONT_STACK}\' font-size="9" fill="{text["secondary"]}">'
-            f"Rolling last-12-month activity.</text>",
         ]
     )
 
@@ -296,7 +289,8 @@ def render_bottom_left_stats(x: float, y: float, palette_name: str, stats: Stats
     chart_height = 54
     bar_width = 12
     bar_gap = 4
-    title_y = label_y + 28
+    title_y = label_y + 20
+    tagline_y = title_y + 16
     max_value = max(stats.day_of_week_totals) or 1
     day_labels = ["S", "M", "T", "W", "T", "F", "S"]
 
@@ -319,6 +313,16 @@ def render_bottom_left_stats(x: float, y: float, palette_name: str, stats: Stats
         f'<text x="{chart_x:.2f}" y="{title_y:.2f}" '
         f'font-family=\'{FONT_STACK}\' font-size="12" fill="{text["secondary"]}" letter-spacing="0.3">'
         f"Most active days</text>"
+    )
+    parts.append(
+        f'<text x="{chart_x:.2f}" y="{tagline_y:.2f}" '
+        f'font-family=\'{FONT_STACK}\' font-size="9" fill="{text["secondary"]}">'
+        f"Data pulled daily from GitHub.</text>"
+    )
+    parts.append(
+        f'<text x="{chart_x:.2f}" y="{tagline_y + 10:.2f}" '
+        f'font-family=\'{FONT_STACK}\' font-size="9" fill="{text["secondary"]}">'
+        f"Rolling last-12-month activity.</text>"
     )
 
     return "\n".join(parts)
