@@ -16,9 +16,7 @@ import random
 import sys
 import urllib.error
 import urllib.request
-from collections import Counter
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -73,7 +71,6 @@ LAST_YEAR_QUERY = """
 query($login: String!) {
   user(login: $login) {
     contributionsCollection {
-      totalCommitContributions
       contributionCalendar {
         totalContributions
         weeks {
@@ -83,57 +80,6 @@ query($login: String!) {
             date
           }
         }
-      }
-    }
-  }
-}
-"""
-
-RANGE_QUERY = """
-query($login: String!, $from: DateTime!, $to: DateTime!) {
-  user(login: $login) {
-    contributionsCollection(from: $from, to: $to) {
-      contributionYears
-      totalCommitContributions
-      contributionCalendar {
-        totalContributions
-        weeks {
-          contributionDays {
-            contributionCount
-            contributionLevel
-            date
-          }
-        }
-      }
-    }
-  }
-}
-"""
-
-REPOS_QUERY = """
-query($login: String!, $cursor: String) {
-  user(login: $login) {
-    repositories(
-      first: 100
-      after: $cursor
-      ownerAffiliations: OWNER
-      isFork: false
-      orderBy: {field: PUSHED_AT, direction: DESC}
-    ) {
-      nodes {
-        isArchived
-        languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
-          edges {
-            size
-            node {
-              name
-            }
-          }
-        }
-      }
-      pageInfo {
-        hasNextPage
-        endCursor
       }
     }
   }
@@ -152,15 +98,7 @@ class Cell:
 @dataclass
 class Stats:
     total_contributions: int
-    top_languages: list[tuple[str, float]]
     day_of_week_totals: list[int]
-
-
-MOCK_STATS = Stats(
-    total_contributions=1247,
-    top_languages=[("TypeScript", 0.42), ("Python", 0.28), ("Rust", 0.18), ("Go", 0.12)],
-    day_of_week_totals=[48, 231, 268, 245, 252, 178, 25],
-)
 
 
 def generate_mock_data(weeks: int = 53) -> list[Cell]:
@@ -196,6 +134,20 @@ def generate_mock_data(weeks: int = 53) -> list[Cell]:
                 count = random.randint(16, 28)
             cells.append(Cell(w, d, level, count))
     return cells
+
+
+def stats_from_cells(cells: list[Cell]) -> Stats:
+    day_totals = [0, 0, 0, 0, 0, 0, 0]
+    total_contributions = 0
+
+    for cell in cells:
+        day_totals[cell.day] += cell.count
+        total_contributions += cell.count
+
+    return Stats(
+        total_contributions=total_contributions,
+        day_of_week_totals=day_totals,
+    )
 
 
 def shade(hex_color: str, factor: float) -> str:
@@ -382,14 +334,6 @@ def render_svg(cells: list[Cell], palette_name: str, stats: Stats, weeks: int) -
     return "\n".join(parts)
 
 
-def build_iso_datetime(value: date, end_of_day: bool = False) -> str:
-    if end_of_day:
-        dt = datetime(value.year, value.month, value.day, 23, 59, 59, tzinfo=timezone.utc)
-    else:
-        dt = datetime(value.year, value.month, value.day, 0, 0, 0, tzinfo=timezone.utc)
-    return dt.isoformat().replace("+00:00", "Z")
-
-
 def github_graphql(token: str, query: str, variables: dict[str, object]) -> dict[str, object]:
     payload = json.dumps({"query": query, "variables": variables}).encode("utf-8")
     request = urllib.request.Request(
@@ -416,53 +360,12 @@ def github_graphql(token: str, query: str, variables: dict[str, object]) -> dict
     return data["data"]
 
 
-def fetch_range_payload(token: str, login: str, start: date, end: date) -> dict[str, object]:
-    data = github_graphql(
-        token,
-        RANGE_QUERY,
-        {
-            "login": login,
-            "from": build_iso_datetime(start),
-            "to": build_iso_datetime(end, end_of_day=True),
-        },
-    )
-    user = data.get("user")
-    if not user:
-        raise RuntimeError(f"User '{login}' was not found.")
-    return user["contributionsCollection"]
-
-
 def fetch_last_year_payload(token: str, login: str) -> dict[str, object]:
     data = github_graphql(token, LAST_YEAR_QUERY, {"login": login})
     user = data.get("user")
     if not user:
         raise RuntimeError(f"User '{login}' was not found.")
     return user["contributionsCollection"]
-
-
-def fetch_language_totals(token: str, login: str) -> Counter[str]:
-    totals: Counter[str] = Counter()
-    cursor: str | None = None
-
-    while True:
-        data = github_graphql(token, REPOS_QUERY, {"login": login, "cursor": cursor})
-        user = data.get("user")
-        if not user:
-            raise RuntimeError(f"User '{login}' was not found.")
-
-        repositories = user["repositories"]
-        for repo in repositories["nodes"]:
-            if repo["isArchived"]:
-                continue
-            for edge in repo["languages"]["edges"]:
-                totals[edge["node"]["name"]] += edge["size"]
-
-        page_info = repositories["pageInfo"]
-        if not page_info["hasNextPage"]:
-            break
-        cursor = page_info["endCursor"]
-
-    return totals
 
 
 def build_cells_and_days(weeks: list[dict[str, object]]) -> tuple[list[Cell], list[int]]:
@@ -482,25 +385,14 @@ def build_cells_and_days(weeks: list[dict[str, object]]) -> tuple[list[Cell], li
     return cells, day_totals
 
 
-def normalize_languages(totals: Counter[str], top_n: int = 4) -> list[tuple[str, float]]:
-    if not totals:
-        return [("No repos", 1.0)]
-
-    top = totals.most_common(top_n)
-    total_size = sum(size for _, size in top) or 1
-    return [(name, size / total_size) for name, size in top]
-
-
 def fetch_live_data(token: str, login: str) -> tuple[list[Cell], Stats, int]:
     current_payload = fetch_last_year_payload(token, login)
 
     weeks = current_payload["contributionCalendar"]["weeks"]
     cells, day_totals = build_cells_and_days(weeks)
-    language_totals = fetch_language_totals(token, login)
 
     stats = Stats(
         total_contributions=current_payload["contributionCalendar"]["totalContributions"],
-        top_languages=normalize_languages(language_totals),
         day_of_week_totals=day_totals,
     )
     return cells, stats, len(weeks)
@@ -531,7 +423,7 @@ def main() -> int:
 
     if args.mock:
         cells = generate_mock_data()
-        stats = MOCK_STATS
+        stats = stats_from_cells(cells)
         weeks = 53
     else:
         if not args.user:
